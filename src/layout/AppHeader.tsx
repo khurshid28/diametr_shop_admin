@@ -1,6 +1,15 @@
 import { Link } from "react-router";
 import { useSidebar } from "../context/SidebarContext";
 import { ThemeToggleButton } from "../components/common/ThemeToggleButton";
+import Moment from "moment";
+
+function getSubBadge(expired?: string | null) {
+  if (!expired) return null;
+  const days = Math.ceil((new Date(expired).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  if (days < 0)  return { text: "Obuna tugagan", cls: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" };
+  if (days <= 7) return { text: `Obuna: ${days} kun`, cls: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" };
+  return { text: `Obuna: ${Moment(expired).format("DD.MM.YY")}`, cls: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" };
+}
 
 const AppHeader: React.FC = () => {
   const { isMobileOpen, isExpanded, toggleSidebar, toggleMobileSidebar } = useSidebar();
@@ -15,6 +24,7 @@ const AppHeader: React.FC = () => {
 
   const user = JSON.parse(localStorage.getItem("user") ?? "null");
   const shopName = user?.shop?.name ?? user?.shopName ?? "Do'kon Admin";
+  const subBadge = getSubBadge(user?.shop?.expired);
 
   return (
     <header className="sticky top-0 flex w-full bg-white border-gray-200 z-99999 dark:border-gray-800 dark:bg-gray-900 lg:border-b">
@@ -39,8 +49,13 @@ const AppHeader: React.FC = () => {
           </Link>
         </div>
 
-        {/* Right: shop name, theme toggle, user */}
+        {/* Right: subscription badge, shop name, theme toggle, user */}
         <div className="flex items-center gap-3">
+          {subBadge && (
+            <Link to="/profile" className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-opacity hover:opacity-80 ${subBadge.cls}`}>
+              {subBadge.text}
+            </Link>
+          )}
           <span className="hidden sm:block text-sm font-medium text-gray-600 dark:text-gray-300">
             🏪 {shopName}
           </span>
