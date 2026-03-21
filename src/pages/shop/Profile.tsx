@@ -27,6 +27,7 @@ export default function ProfilePage() {
 
   const [chatId, setChatId] = useState<string>(user?.chat_id ?? "");
   const [savingTg, setSavingTg] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<number>(1);
 
   const sub = getSubStatus(user?.shop?.expired);
 
@@ -248,6 +249,107 @@ export default function ProfilePage() {
             <Button onClick={handlePasswordChange} disabled={saving} className="w-full">
               {saving ? "Saqlanmoqda..." : "Parolni o'zgartirish"}
             </Button>
+          </div>
+        </div>
+
+        {/* Subscription Payment */}
+        <div className="lg:col-span-2 rounded-2xl border border-gray-200 bg-white p-6 dark:border-white/[0.05] dark:bg-white/[0.03]">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-brand-50 dark:bg-brand-900/20 flex items-center justify-center">
+              <svg className="w-6 h-6 text-brand-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Obunani to&apos;ldirish</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Xizmatdan foydalanishni davom ettiring</p>
+            </div>
+          </div>
+
+          {/* Plans */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            {[
+              { months: 1, price: 50_000,  label: "1 oy" },
+              { months: 3, price: 135_000, label: "3 oy", badge: "Tejamkorona" },
+              { months: 6, price: 250_000, label: "6 oy", badge: "Eng arzon" },
+            ].map((plan) => (
+              <div
+                key={plan.months}
+                className={`rounded-xl border p-4 text-center cursor-pointer transition-all ${
+                  selectedPlan === plan.months
+                    ? "border-brand-500 bg-brand-50 dark:bg-brand-900/20 ring-2 ring-brand-500/30"
+                    : "border-gray-200 dark:border-gray-700 hover:border-brand-300 dark:hover:border-brand-700"
+                }`}
+                onClick={() => setSelectedPlan(plan.months)}
+              >
+                {plan.badge && (
+                  <span className="inline-block mb-2 px-2 py-0.5 rounded-full text-xs font-semibold bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400">
+                    {plan.badge}
+                  </span>
+                )}
+                <p className="text-2xl font-bold text-gray-800 dark:text-white">
+                  {plan.price.toLocaleString("uz")}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">so&apos;m / {plan.label}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Payment methods */}
+          <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+            To&apos;lov usulini tanlang:
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Click */}
+            <a
+              href={`https://my.click.uz/services/pay?service_id=35698&merchant_id=19286&amount=${
+                selectedPlan === 1 ? 50000 : selectedPlan === 3 ? 135000 : 250000
+              }&transaction_param=${user?.shop?.id ?? user?.id ?? ""}&return_url=https://shop.diametr.uz/profile`}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center justify-center gap-3 px-4 py-3 rounded-xl border-2 border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors group"
+            >
+              <svg viewBox="0 0 48 48" className="w-7 h-7" fill="none">
+                <rect width="48" height="48" rx="12" fill="#0066FF"/>
+                <text x="24" y="31" textAnchor="middle" fontSize="16" fontWeight="bold" fill="white" fontFamily="sans-serif">Click</text>
+              </svg>
+              <span className="font-semibold text-blue-600 dark:text-blue-400 group-hover:underline">Click</span>
+            </a>
+
+            {/* Payme */}
+            <a
+              href={`https://checkout.paycom.uz/${btoa(`m=6773a6a38a4e9fce15fa5895;ac.shop_id=${user?.shop?.id ?? ""};a=${
+                selectedPlan === 1 ? 5000000 : selectedPlan === 3 ? 13500000 : 25000000
+              }`)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center justify-center gap-3 px-4 py-3 rounded-xl border-2 border-sky-400 hover:bg-sky-50 dark:hover:bg-sky-900/20 transition-colors group"
+            >
+              <svg viewBox="0 0 48 48" className="w-7 h-7" fill="none">
+                <rect width="48" height="48" rx="12" fill="#00CCEE"/>
+                <text x="24" y="31" textAnchor="middle" fontSize="13" fontWeight="bold" fill="white" fontFamily="sans-serif">Payme</text>
+              </svg>
+              <span className="font-semibold text-sky-600 dark:text-sky-400 group-hover:underline">Payme</span>
+            </a>
+
+            {/* Uzum */}
+            <a
+              href="https://t.me/diametr_admin_bot"
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center justify-center gap-3 px-4 py-3 rounded-xl border-2 border-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors group"
+            >
+              <svg viewBox="0 0 48 48" className="w-7 h-7" fill="none">
+                <rect width="48" height="48" rx="12" fill="#7C3AED"/>
+                <text x="24" y="31" textAnchor="middle" fontSize="13" fontWeight="bold" fill="white" fontFamily="sans-serif">Uzum</text>
+              </svg>
+              <span className="font-semibold text-purple-600 dark:text-purple-400 group-hover:underline">Uzum</span>
+            </a>
+          </div>
+
+          <div className="mt-4 p-3 rounded-xl bg-gray-50 dark:bg-white/[0.02] border border-gray-100 dark:border-gray-800 text-sm text-gray-500 dark:text-gray-400">
+            To&apos;lov amalga oshirilgandan so&apos;ng operator tomonidan obuna avtomatik yangilanadi.
+            Muammo bo&apos;lsa <a href="https://t.me/diametr_admin_bot" target="_blank" rel="noreferrer" className="text-brand-500 hover:underline">@diametr_admin_bot</a> ga murojaat qiling.
           </div>
         </div>
 
