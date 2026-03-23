@@ -20,12 +20,15 @@ export interface ShopProductItemProps {
   count?: number;
   price?: number;
   bonus_price?: number;
+  sold_count?: number;
+  last_sold?: string | null;
   shop_id?: number;
   shop?: { id: number; name?: string };
   product_item_id?: number;
   product_item?: {
     id: number;
     name?: string;
+    image?: string;
     value?: number | string;
     color?: string;
     size?: string;
@@ -35,6 +38,7 @@ export interface ShopProductItemProps {
       name?: string;
       name_uz?: string;
       name_ru?: string;
+      image?: string;
       category_id?: number;
       category?: { id: number; name?: string; name_uz?: string };
     };
@@ -245,6 +249,8 @@ export default function ShopProductsTable({
           "Tovar": pname,
           "Variant": variants,
           "Soni": p.count ?? 0,
+          "Sotilgan": p.sold_count ?? 0,
+          "Oxirgi savdo": p.last_sold ? Moment(p.last_sold).format('DD.MM.YYYY') : "",
           "Narx": p.price ?? 0,
           "Skidka narxi": p.bonus_price ?? "",
         };
@@ -273,6 +279,15 @@ export default function ShopProductsTable({
   const discountPct = (price?: number, bonus?: number) =>
     price && bonus && price > 0 ? Math.round((1 - bonus / price) * 100) : null;
 
+  const staticUrl = import.meta.env.VITE_STATIC_PATH ?? "";
+
+  const getItemImage = (sp: ShopProductItemProps) => {
+    const pi = sp.product_item;
+    if (pi?.image) return `${staticUrl}/product-items/${pi.image}`;
+    if (pi?.product?.image) return `${staticUrl}/products/${pi.product.image}`;
+    return null;
+  };
+
   return (
     <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
       <div className="max-w-full overflow-x-auto">
@@ -293,9 +308,11 @@ export default function ShopProductsTable({
           <TableHeader>
             <TableRow>
               <TableCell isHeader className="px-5 py-3 text-xs font-medium text-gray-500 uppercase dark:text-gray-400">#</TableCell>
+              <TableCell isHeader className="px-5 py-3 text-xs font-medium text-gray-500 uppercase dark:text-gray-400">Rasm</TableCell>
               <TableCell isHeader className="px-5 py-3 text-xs font-medium text-gray-500 uppercase dark:text-gray-400">Tovar</TableCell>
               <TableCell isHeader className="px-5 py-3 text-xs font-medium text-gray-500 uppercase dark:text-gray-400">Variant</TableCell>
               <TableCell isHeader className="px-5 py-3 text-xs font-medium text-gray-500 uppercase dark:text-gray-400">Soni</TableCell>
+              <TableCell isHeader className="px-5 py-3 text-xs font-medium text-gray-500 uppercase dark:text-gray-400">Sotilgan</TableCell>
               <TableCell isHeader className="px-5 py-3 text-xs font-medium text-gray-500 uppercase dark:text-gray-400">Narx</TableCell>
               <TableCell isHeader className="px-5 py-3 text-xs font-medium text-gray-500 uppercase dark:text-gray-400">Amallar</TableCell>
             </TableRow>
@@ -303,7 +320,7 @@ export default function ShopProductsTable({
           <TableBody>
             {currentItems.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-gray-400">Tovarlar yo&apos;q</TableCell>
+                <TableCell colSpan={8} className="py-8 text-center text-gray-400">Tovarlar yo&apos;q</TableCell>
               </TableRow>
             ) : currentItems.map((item, idx) => {
               const variantLabel = getVariantLabel(item);
@@ -313,6 +330,18 @@ export default function ShopProductsTable({
                   <TableCell className="px-5 py-4 text-sm text-gray-600 dark:text-gray-400">
                     {(currentPage - 1) * +optionValue + idx + 1}
                   </TableCell>
+                  <TableCell className="px-5 py-4">
+                    {(() => {
+                      const imgUrl = getItemImage(item);
+                      return imgUrl ? (
+                        <img src={imgUrl} alt="" className="h-10 w-10 rounded-lg object-cover border border-gray-200 dark:border-white/10" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                      ) : (
+                        <div className="h-10 w-10 rounded-lg bg-gray-100 dark:bg-white/[0.06] flex items-center justify-center">
+                          <svg className="h-5 w-5 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                        </div>
+                      );
+                    })()}
+                  </TableCell>
                   <TableCell className="px-5 py-4 font-medium text-gray-800 dark:text-white text-sm">
                     <div>{getProductName(item)}</div>
                     {item.product_item?.product?.category?.name_uz && (
@@ -321,11 +350,24 @@ export default function ShopProductsTable({
                   </TableCell>
                   <TableCell className="px-5 py-4 text-sm text-gray-500 dark:text-gray-400">
                     {variantLabel ? (
-                      <span className="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/[0.06] text-xs">{variantLabel}</span>
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/[0.06] text-xs">
+                        {item.product_item?.color?.startsWith('#') && (
+                          <span className="w-4 h-4 rounded-full border-2 border-white dark:border-gray-700 shadow-sm flex-shrink-0 ring-1 ring-gray-200 dark:ring-gray-600" style={{ background: item.product_item.color }} />
+                        )}
+                        {variantLabel}
+                      </span>
                     ) : "—"}
                   </TableCell>
                   <TableCell className="px-5 py-4 text-sm text-gray-700 dark:text-gray-300">
                     {item.count ?? 0} ta
+                  </TableCell>
+                  <TableCell className="px-5 py-4 text-sm">
+                    <div className="font-semibold text-gray-800 dark:text-white">{item.sold_count ?? 0} ta</div>
+                    {item.last_sold ? (
+                      <span className="text-[11px] text-gray-400">{Moment(item.last_sold).format('DD.MM.YYYY HH:mm')}</span>
+                    ) : (
+                      <span className="text-[11px] text-gray-400">—</span>
+                    )}
                   </TableCell>
                   <TableCell className="px-5 py-4 text-sm">
                     {item.bonus_price != null && dp !== null && dp > 0 ? (
