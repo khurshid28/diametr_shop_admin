@@ -13,16 +13,15 @@ import ProfilePage from "./pages/shop/Profile";
 import { PrivateRoute } from "./layout/PrivateRoute";
 import SplashScreen from "./components/common/SplashScreen";
 import { useState, useCallback } from "react";
+import { useLocation } from "react-router";
 
 function SplashWrapper({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
   const [done, setDone] = useState(false);
   const handleDone = useCallback(() => setDone(true), []);
-  return (
-    <>
-      {!done && <SplashScreen onDone={handleDone} />}
-      {done && children}
-    </>
-  );
+  const isHome = location.pathname === "/";
+  if (!isHome || done) return <>{children}</>;
+  return <SplashScreen onDone={handleDone} />;
 }
 
 export default function App() {

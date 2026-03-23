@@ -67,6 +67,8 @@ const emptyForm = {
   bonus_price: "",
 };
 
+type VariantRow = { checked: boolean; count: string; price: string; bonus_price: string };
+
 export default function ShopProductsTable({
   data,
   onRefetch,
@@ -75,10 +77,19 @@ export default function ShopProductsTable({
   onRefetch?: () => void;
 }) {
   const [tableData, setTableData] = useState(data);
-  const { isOpen, openModal, closeModal } = useModal();
+  /* add modal */
+  const { isOpen: addOpen, openModal: openAddModal, closeModal: closeAddModal } = useModal();
+  /* edit modal */
+  const { isOpen: editOpen, openModal: openEditModal, closeModal: closeEditModal } = useModal();
   const [editItem, setEditItem] = useState<ShopProductItemProps | null>(null);
-  const [form, setForm] = useState({ ...emptyForm });
-  const [saving, setSaving] = useState(false);
+  const [editForm, setEditForm] = useState({ count: "", price: "", bonus_price: "" });
+  const [editSaving, setEditSaving] = useState(false);
+
+  /* add flow state */
+  const [addCatId, setAddCatId] = useState("");
+  const [addProdId, setAddProdId] = useState("");
+  const [variantRows, setVariantRows] = useState<Record<number, VariantRow>>({});
+  const [addSaving, setAddSaving] = useState(false);
   const [optionValue, setOptionValue] = useState("10");
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -88,13 +99,6 @@ export default function ShopProductsTable({
   const [allCategories, setAllCategories] = useState<CategoryOption[]>([]);
   const [allProducts, setAllProducts] = useState<ProductRaw[]>([]);
   const [allProductItems, setAllProductItems] = useState<ProductItemRaw[]>([]);
-
-  // selected product item info
-  const [selectedItemInfo, setSelectedItemInfo] = useState<{
-    count?: number;
-    price?: number;
-    bonus_price?: number;
-  } | null>(null);
 
   useEffect(() => { setTableData(data); setCurrentPage(1); }, [data]);
   useEffect(() => { setCurrentPage(1); }, [optionValue]);
@@ -121,110 +125,143 @@ export default function ShopProductsTable({
     });
   }, []);
 
-  // derived options based on form selections
-  const productOptions = allProducts
-    .filter((p) => !form.category_id || String(p.category_id) === form.category_id)
+  // ─── Add modal: derived data ───────────────────────────
+  const addProductOptions = allProducts
+    .filter((p) => !addCatId || String(p.category_id) === addCatId)
     .map((p) => ({ value: String(p.id), label: p.name_uz ?? p.name ?? p.name_ru ?? `#${p.id}` }));
 
-  const productItemOptions = allProductItems
-    .filter((pi) => !form.product_id || String(pi.product?.id ?? pi.product_id ?? "") === form.product_id)
-    .map((pi) => {
-      const pname = pi.product?.name_uz ?? pi.product?.name ?? "";
-      const variants = [
-        pi.value != null && pi.unit_type?.symbol ? `${pi.value} ${pi.unit_type.symbol}` : "",
-        pi.color ?? "",
-        pi.size ?? "",
-      ].filter(Boolean).join(", ");
-      const label = variants ? `${pname ? pname + " — " : ""}${variants}` : (pname || pi.name || `ID:${pi.id}`);
-      return { value: String(pi.id), label };
-    });
+  const addVariants = allProductItems.filter(
+    (pi) => addProdId && String(pi.product?.id ?? pi.product_id ?? "") === addProdId
+  );
 
-  // when product item is selected, prefill price/count from existing shop product if any
+  // When product changes, reset variant rows and pre-fill existing shop product data
   useEffect(() => {
-    if (!form.product_item_id) { setSelectedItemInfo(null); return; }
-    const existing = data.find(
-      (sp) => String(sp.product_item_id ?? sp.product_item?.id) === form.product_item_id && sp.shop_id === shopId
+    if (!addProdId) { setVariantRows({}); return; }
+    const rows: Record<number, VariantRow> = {};
+    const variants = allProductItems.filter(
+      (pi) => String(pi.product?.id ?? pi.product_id ?? "") === addProdId
     );
-    if (existing && !editItem) {
-      setSelectedItemInfo({ count: existing.count, price: existing.price, bonus_price: existing.bonus_price });
-      setForm((prev) => ({
-        ...prev,
-        count: existing.count != null ? String(existing.count) : prev.count,
-        price: existing.price != null ? String(existing.price) : prev.price,
-        bonus_price: existing.bonus_price != null ? String(existing.bonus_price) : prev.bonus_price,
-      }));
-    } else {
-      setSelectedItemInfo(null);
+    for (const v of variants) {
+      const existing = data.find(
+        (sp) => (sp.product_item_id ?? sp.product_item?.id) === v.id && sp.shop_id === shopId
+      );
+      rows[v.id] = {
+        checked: !!existing,
+        count: existing?.count != null ? String(existing.count) : "",
+        price: existing?.price != null ? String(existing.price) : "",
+        bonus_price: existing?.bonus_price != null ? String(existing.bonus_price) : "",
+      };
     }
-  }, [form.product_item_id]);
+    setVariantRows(rows);
+  }, [addProdId, allProductItems]);
 
-  const filteredData = search.trim() === ""
-    ? tableData
-    : tableData.filter((s) => {
-        const q = search.toLowerCase();
-        const pi = s.product_item;
-        const pname = pi?.product?.name_uz ?? pi?.product?.name ?? pi?.name ?? "";
-        return pname.toLowerCase().includes(q);
-      });
+  const toggleVariant = (id: number) => {
+    setVariantRows((prev) => ({
+      ...prev,
+      [id]: { ...prev[id], checked: !prev[id]?.checked },
+    }));
+  };
 
-  const maxPage = Math.ceil(filteredData.length / +optionValue) || 1;
-  const currentItems = filteredData.slice((currentPage - 1) * +optionValue, currentPage * +optionValue);
+  const updateVariantRow = (id: number, field: keyof VariantRow, value: string) => {
+    setVariantRows((prev) => ({
+      ...prev,
+      [id]: { ...prev[id], [field]: value },
+    }));
+  };
 
+  const checkedCount = Object.values(variantRows).filter((r) => r.checked).length;
+
+  // ─── Add: open / close / save ──────────────────────────
+  const openAdd = () => {
+    setAddCatId("");
+    setAddProdId("");
+    setVariantRows({});
+    openAddModal();
+  };
+
+  const handleAddSave = async () => {
+    const toSave = Object.entries(variantRows)
+      .filter(([_, r]) => r.checked && r.price)
+      .map(([id, r]) => ({
+        product_item_id: Number(id),
+        price: Number(r.price),
+        count: r.count ? Number(r.count) : 0,
+        bonus_price: r.bonus_price && Number(r.bonus_price) > 0 ? Number(r.bonus_price) : undefined,
+        shop_id: shopId,
+      }));
+
+    if (toSave.length === 0) {
+      toast.error("Kamida bitta variant tanlang va narx kiriting");
+      return;
+    }
+    setAddSaving(true);
+    try {
+      let created = 0;
+      let updated = 0;
+      for (const payload of toSave) {
+        const existing = data.find(
+          (sp) => (sp.product_item_id ?? sp.product_item?.id) === payload.product_item_id && sp.shop_id === shopId
+        );
+        if (existing) {
+          await axiosClient.put(`/shop-product/${existing.id}`, payload);
+          updated++;
+        } else {
+          await axiosClient.post("/shop-product", payload);
+          created++;
+        }
+      }
+      const msgs: string[] = [];
+      if (created) msgs.push(`${created} ta yangi qo'shildi`);
+      if (updated) msgs.push(`${updated} ta yangilandi`);
+      toast.success(msgs.join(", "));
+      onRefetch?.();
+      closeAddModal();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? "Xatolik yuz berdi");
+    } finally {
+      setAddSaving(false);
+    }
+  };
+
+  // ─── Edit: open / save ────────────────────────────────
   const openEdit = (item: ShopProductItemProps) => {
     setEditItem(item);
-    const pi = item.product_item;
-    const productId = String(pi?.product?.id ?? "");
-    const catId = String(pi?.product?.category_id ?? "");
-    setForm({
-      category_id: catId,
-      product_id: productId,
-      product_item_id: String(item.product_item_id ?? pi?.id ?? ""),
+    setEditForm({
       count: item.count != null ? String(item.count) : "",
       price: item.price != null ? String(item.price) : "",
       bonus_price: item.bonus_price != null ? String(item.bonus_price) : "",
     });
-    setSelectedItemInfo(null);
-    openModal();
+    openEditModal();
   };
 
-  const openAdd = () => {
-    setEditItem(null);
-    setForm({ ...emptyForm });
-    setSelectedItemInfo(null);
-    openModal();
-  };
-
-  const handleSave = async () => {
-    if (!form.product_item_id || !form.price) {
-      toast.error("Tovar varianti va narx kiritilishi shart");
+  const handleEditSave = async () => {
+    if (!editItem || !editForm.price) {
+      toast.error("Narx kiritilishi shart");
       return;
     }
-    setSaving(true);
+    setEditSaving(true);
     try {
       const payload: any = {
-        product_item_id: Number(form.product_item_id),
-        price: Number(form.price),
-        count: form.count ? Number(form.count) : 0,
+        product_item_id: editItem.product_item_id ?? editItem.product_item?.id,
+        price: Number(editForm.price),
+        count: editForm.count ? Number(editForm.count) : 0,
         shop_id: shopId,
       };
-      if (form.bonus_price && Number(form.bonus_price) > 0) payload.bonus_price = Number(form.bonus_price);
+      if (editForm.bonus_price && Number(editForm.bonus_price) > 0)
+        payload.bonus_price = Number(editForm.bonus_price);
 
-      if (editItem) {
-        await axiosClient.put(`/shop-product/${editItem.id}`, payload);
-        toast.success("Tovar yangilandi");
-      } else {
-        await axiosClient.post("/shop-product", payload);
-        toast.success("Tovar qo'shildi");
-      }
+      await axiosClient.put(`/shop-product/${editItem.id}`, payload);
+      toast.success("Tovar yangilandi");
       onRefetch?.();
-      closeModal();
+      closeEditModal();
     } catch (e: any) {
       toast.error(e?.response?.data?.message ?? "Xatolik yuz berdi");
     } finally {
-      setSaving(false);
+      setEditSaving(false);
     }
   };
 
+  // ─── Delete ────────────────────────────────────────────
   const handleDelete = async (id: number) => {
     try {
       await axiosClient.delete(`/shop-product/${id}`);
@@ -234,6 +271,18 @@ export default function ShopProductsTable({
       toast.error("Xatolik yuz berdi");
     }
   };
+
+  // ─── Table helpers ─────────────────────────────────────
+  const filteredData = search.trim() === ""
+    ? tableData
+    : tableData.filter((s) => {
+        const q = search.toLowerCase();
+        const pi = s.product_item;
+        const pname = pi?.product?.name_uz ?? pi?.product?.name ?? pi?.name ?? "";
+        return pname.toLowerCase().includes(q);
+      });
+  const maxPage = Math.ceil(filteredData.length / +optionValue) || 1;
+  const currentItems = filteredData.slice((currentPage - 1) * +optionValue, currentPage * +optionValue);
 
   const handleExport = () => {
     const ws = XLSX.utils.json_to_sheet(
@@ -286,6 +335,15 @@ export default function ShopProductsTable({
     if (pi?.image) return `${staticUrl}/product-items/${pi.image}`;
     if (pi?.product?.image) return `${staticUrl}/products/${pi.product.image}`;
     return null;
+  };
+
+  const getVariantLabelRaw = (pi: ProductItemRaw) => {
+    return [
+      pi.name ?? "",
+      pi.value != null && pi.unit_type?.symbol ? `${pi.value} ${pi.unit_type.symbol}` : "",
+      pi.color ?? "",
+      pi.size ?? "",
+    ].filter(Boolean).join(" · ") || `ID:${pi.id}`;
   };
 
   return (
@@ -401,79 +459,207 @@ export default function ShopProductsTable({
         </div>
       </div>
 
-      {/* Add/Edit Modal */}
-      <Modal isOpen={isOpen} onClose={closeModal} className="max-w-[540px] m-4">
-        <div className="relative w-full p-4 overflow-y-auto bg-white no-scrollbar rounded-3xl dark:bg-gray-900 lg:p-8 max-h-[90vh]">
-          <div className="px-2 pr-14 mb-6">
-            <h4 className="text-xl font-semibold text-gray-800 dark:text-white">
-              {editItem ? "Tovarni tahrirlash" : "Yangi tovar qo'shish"}
-            </h4>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Kategoriya → Tovar → Variantni tanlang</p>
+      {/* ─── ADD MODAL: Multi-variant selection ──────────── */}
+      <Modal isOpen={addOpen} onClose={closeAddModal} className="max-w-[720px] m-4">
+        <div className="relative w-full overflow-hidden bg-white no-scrollbar rounded-3xl dark:bg-gray-900 shadow-2xl max-h-[90vh] flex flex-col">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 px-6 py-4 flex-shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-white/20 backdrop-blur-sm">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </div>
+              <div>
+                <h4 className="text-lg font-bold text-white">Tovar qo&apos;shish</h4>
+                <p className="text-sm text-white/70">Tovar tanlang, variantlarni belgilang</p>
+              </div>
+            </div>
           </div>
 
-          <div className="flex flex-col gap-4 px-2">
-            {/* Step 1: Category */}
-            <div>
-              <Label>1. Kategoriya</Label>
-              <Select
-                options={[{ value: "", label: "Barcha kategoriyalar" }, ...allCategories]}
-                defaultValue={form.category_id}
-                onChange={(v) => setForm({ ...form, category_id: v, product_id: "", product_item_id: "" })}
-              />
-            </div>
-
-            {/* Step 2: Product */}
-            <div>
-              <Label>2. Tovar <span className="text-error-500">*</span></Label>
-              {productOptions.length > 0 ? (
+          {/* Body */}
+          <div className="p-6 overflow-y-auto flex-1">
+            {/* Step 1: Category + Product selection */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+              <div>
+                <Label>Kategoriya</Label>
                 <Select
-                  options={[{ value: "", label: "Tovarni tanlang..." }, ...productOptions]}
-                  defaultValue={form.product_id}
-                  onChange={(v) => setForm({ ...form, product_id: v, product_item_id: "" })}
+                  options={[{ value: "", label: "Barcha kategoriyalar" }, ...allCategories]}
+                  defaultValue={addCatId}
+                  onChange={(v) => { setAddCatId(v); setAddProdId(""); setVariantRows({}); }}
                 />
-              ) : (
-                <p className="text-sm text-gray-400 py-2">
-                  {form.category_id ? "Bu kategoriyada tovar yo'q" : "Avval kategoriya tanlang"}
-                </p>
-              )}
-            </div>
-
-            {/* Step 3: Product Item / Variant */}
-            <div>
-              <Label>3. Variant / Tur <span className="text-error-500">*</span></Label>
-              {form.product_id ? (
-                productItemOptions.length > 0 ? (
+              </div>
+              <div>
+                <Label>Tovar <span className="text-error-500">*</span></Label>
+                {addProductOptions.length > 0 ? (
                   <Select
-                    options={[{ value: "", label: "Variantni tanlang..." }, ...productItemOptions]}
-                    defaultValue={form.product_item_id}
-                    onChange={(v) => setForm({ ...form, product_item_id: v })}
+                    options={[{ value: "", label: "Tovarni tanlang..." }, ...addProductOptions]}
+                    defaultValue={addProdId}
+                    onChange={(v) => setAddProdId(v)}
                   />
                 ) : (
-                  <p className="text-sm text-gray-400 py-2">Bu tovar uchun variant yo&apos;q</p>
-                )
-              ) : (
-                <p className="text-sm text-gray-400 py-2">Avval tovarni tanlang</p>
-              )}
+                  <p className="text-sm text-gray-400 py-2">
+                    {addCatId ? "Bu kategoriyada tovar yo'q" : "Tovar yo'q"}
+                  </p>
+                )}
+              </div>
             </div>
 
-            {/* Hint if existing shop product found */}
-            {selectedItemInfo && (
-              <div className="px-3 py-2 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/40 text-sm text-blue-700 dark:text-blue-400">
-                Bu variant do&apos;koningizda mavjud: {selectedItemInfo.count ?? 0} ta,{" "}
-                {selectedItemInfo.price ? `${formatMoney(selectedItemInfo.price)} so'm` : "narx yo'q"}
-                {selectedItemInfo.bonus_price ? ` (skidka: ${formatMoney(selectedItemInfo.bonus_price)} so'm)` : ""}
+            {/* Step 2: Variants with checkboxes */}
+            {addProdId && addVariants.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                    Variantlar
+                    <span className="ml-1.5 text-gray-400 font-normal">({addVariants.length} ta)</span>
+                  </p>
+                  {checkedCount > 0 && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 text-xs font-bold border border-emerald-100 dark:border-emerald-800/30">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                      {checkedCount} ta tanlandi
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  {addVariants.map((v) => {
+                    const row = variantRows[v.id] ?? { checked: false, count: "", price: "", bonus_price: "" };
+                    const existing = data.find(
+                      (sp) => (sp.product_item_id ?? sp.product_item?.id) === v.id && sp.shop_id === shopId
+                    );
+                    return (
+                      <div key={v.id} className={`rounded-xl border transition-all ${
+                        row.checked
+                          ? "border-emerald-200 dark:border-emerald-800/40 bg-emerald-50/50 dark:bg-emerald-900/10"
+                          : "border-gray-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02]"
+                      }`}>
+                        {/* Variant header with checkbox */}
+                        <label className="flex items-center gap-3 px-4 py-3 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={row.checked}
+                            onChange={() => toggleVariant(v.id)}
+                            className="w-4.5 h-4.5 rounded-md border-2 border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500 focus:ring-offset-0 cursor-pointer"
+                          />
+                          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                            {v.color?.startsWith("#") && (
+                              <span className="w-5 h-5 rounded-md flex-shrink-0 ring-1 ring-black/10 shadow-sm" style={{ background: v.color }} />
+                            )}
+                            <span className="font-medium text-sm text-gray-800 dark:text-white truncate">
+                              {getVariantLabelRaw(v)}
+                            </span>
+                          </div>
+                          {existing && (
+                            <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-[11px] font-medium">
+                              Mavjud: {existing.count ?? 0} ta, {existing.price ? formatMoney(existing.price) : "—"}
+                            </span>
+                          )}
+                        </label>
+
+                        {/* Expanded fields when checked */}
+                        {row.checked && (
+                          <div className="px-4 pb-3 pt-0">
+                            <div className="grid grid-cols-3 gap-3">
+                              <div>
+                                <label className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Soni</label>
+                                <Input
+                                  type="number"
+                                  placeholder="0"
+                                  value={row.count}
+                                  onChange={(e) => updateVariantRow(v.id, "count", e.target.value)}
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                                  Narx <span className="text-error-500">*</span>
+                                </label>
+                                <Input
+                                  type="number"
+                                  placeholder="so'm"
+                                  value={row.price}
+                                  onChange={(e) => updateVariantRow(v.id, "price", e.target.value)}
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Skidka narxi</label>
+                                <Input
+                                  type="number"
+                                  placeholder="ixtiyoriy"
+                                  value={row.bonus_price}
+                                  onChange={(e) => updateVariantRow(v.id, "bonus_price", e.target.value)}
+                                />
+                              </div>
+                            </div>
+                            {row.bonus_price && row.price && Number(row.price) > 0 && Number(row.bonus_price) > 0 && (
+                              <p className="mt-1.5 text-xs text-brand-600 dark:text-brand-400">
+                                Chegirma: {Math.round((1 - Number(row.bonus_price) / Number(row.price)) * 100)}% |{" "}
+                                {formatMoney(Number(row.price))} → {formatMoney(Number(row.bonus_price))} so&apos;m
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
-            {/* Count and Price */}
-            <div className="grid grid-cols-2 gap-3">
+            {addProdId && addVariants.length === 0 && (
+              <div className="py-8 text-center">
+                <p className="text-sm text-gray-400">Bu tovar uchun variantlar yo&apos;q</p>
+                <p className="text-xs text-gray-400 mt-1">Administrator variantlarni qo'shishi kerak</p>
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center gap-3 px-6 py-4 border-t border-gray-100 dark:border-white/[0.05] flex-shrink-0 justify-end">
+            <Button size="sm" variant="outline" onClick={closeAddModal}>Bekor qilish</Button>
+            <Button size="sm" onClick={handleAddSave} disabled={addSaving || checkedCount === 0}>
+              {addSaving ? (
+                <span className="inline-flex items-center gap-2">
+                  <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                  Saqlanmoqda...
+                </span>
+              ) : `Saqlash (${checkedCount} ta)`}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ─── EDIT MODAL: Single shop product ─────────────── */}
+      <Modal isOpen={editOpen} onClose={closeEditModal} className="max-w-[500px] m-4">
+        <div className="relative w-full overflow-hidden bg-white no-scrollbar rounded-3xl dark:bg-gray-900 shadow-2xl">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-4">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-white/20 backdrop-blur-sm">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+              </div>
+              <div>
+                <h4 className="text-lg font-bold text-white">Tovarni tahrirlash</h4>
+                {editItem && (
+                  <p className="text-sm text-white/70">{getProductName(editItem)} — {getVariantLabel(editItem) || "variant"}</p>
+                )}
+              </div>
+            </div>
+          </div>
+          {/* Body */}
+          <div className="p-6">
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Soni (dona)</Label>
                 <Input
                   type="number"
                   placeholder="0"
-                  value={form.count}
-                  onChange={(e) => setForm({ ...form, count: e.target.value })}
+                  value={editForm.count}
+                  onChange={(e) => setEditForm({ ...editForm, count: e.target.value })}
                 />
               </div>
               <div>
@@ -481,35 +667,37 @@ export default function ShopProductsTable({
                 <Input
                   type="number"
                   placeholder="0"
-                  value={form.price}
-                  onChange={(e) => setForm({ ...form, price: e.target.value })}
+                  value={editForm.price}
+                  onChange={(e) => setEditForm({ ...editForm, price: e.target.value })}
                 />
               </div>
             </div>
-
-            {/* Bonus price */}
-            <div>
+            <div className="mt-4">
               <Label>Skidka narxi (so&apos;m) — ixtiyoriy</Label>
               <Input
                 type="number"
                 placeholder="Skidka bo'lmasa bo'sh qoldiring"
-                value={form.bonus_price}
-                onChange={(e) => setForm({ ...form, bonus_price: e.target.value })}
+                value={editForm.bonus_price}
+                onChange={(e) => setEditForm({ ...editForm, bonus_price: e.target.value })}
               />
-              {form.bonus_price && form.price && Number(form.price) > 0 && Number(form.bonus_price) > 0 && (
+              {editForm.bonus_price && editForm.price && Number(editForm.price) > 0 && Number(editForm.bonus_price) > 0 && (
                 <p className="mt-1 text-xs text-brand-600 dark:text-brand-400">
-                  Chegirma: {Math.round((1 - Number(form.bonus_price) / Number(form.price)) * 100)}% |
-                  Asosiy: {formatMoney(Number(form.price))} so&apos;m → Skidka: {formatMoney(Number(form.bonus_price))} so&apos;m
+                  Chegirma: {Math.round((1 - Number(editForm.bonus_price) / Number(editForm.price)) * 100)}% |{" "}
+                  {formatMoney(Number(editForm.price))} → {formatMoney(Number(editForm.bonus_price))} so&apos;m
                 </p>
               )}
             </div>
-          </div>
-
-          <div className="flex items-center gap-3 px-2 mt-6 justify-end">
-            <Button size="sm" variant="outline" onClick={closeModal}>Bekor qilish</Button>
-            <Button size="sm" onClick={handleSave} disabled={saving || !form.product_item_id || !form.price}>
-              {saving ? "Saqlanmoqda..." : "Saqlash"}
-            </Button>
+            <div className="flex items-center gap-3 mt-6 justify-end">
+              <Button size="sm" variant="outline" onClick={closeEditModal}>Bekor qilish</Button>
+              <Button size="sm" onClick={handleEditSave} disabled={editSaving || !editForm.price}>
+                {editSaving ? (
+                  <span className="inline-flex items-center gap-2">
+                    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                    Saqlanmoqda...
+                  </span>
+                ) : "Saqlash"}
+              </Button>
+            </div>
           </div>
         </div>
       </Modal>
