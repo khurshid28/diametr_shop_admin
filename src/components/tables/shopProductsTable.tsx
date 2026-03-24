@@ -330,6 +330,38 @@ export default function ShopProductsTable({
     catch { toast.error("Xatolik yuz berdi"); }
   };
 
+  // ─── Inline edit single variant ────────────────────────
+  const [inlineEditId, setInlineEditId] = useState<number | null>(null);
+  const [inlineForm, setInlineForm] = useState({ count: "", price: "", bonus_price: "" });
+  const [inlineSaving, setInlineSaving] = useState(false);
+
+  const startInlineEdit = (sp: ShopProductItemProps) => {
+    setInlineEditId(sp.id);
+    setInlineForm({
+      count: sp.count != null ? String(sp.count) : "",
+      price: sp.price != null ? String(sp.price) : "",
+      bonus_price: sp.bonus_price != null ? String(sp.bonus_price) : "",
+    });
+  };
+
+  const cancelInlineEdit = () => { setInlineEditId(null); };
+
+  const saveInlineEdit = async (id: number) => {
+    if (!inlineForm.price) { toast.error("Narx kiritish shart"); return; }
+    setInlineSaving(true);
+    try {
+      await axiosClient.put(`/shop-product/${id}`, {
+        price: Number(inlineForm.price),
+        count: inlineForm.count ? Number(inlineForm.count) : 0,
+        bonus_price: inlineForm.bonus_price && Number(inlineForm.bonus_price) > 0 ? Number(inlineForm.bonus_price) : undefined,
+      });
+      toast.success("Yangilandi");
+      setInlineEditId(null);
+      onRefetch?.();
+    } catch { toast.error("Xatolik yuz berdi"); }
+    finally { setInlineSaving(false); }
+  };
+
   // ─── Helpers ───────────────────────────────────────────
   const staticUrl = import.meta.env.VITE_STATIC_PATH ?? "";
 
@@ -456,6 +488,7 @@ export default function ShopProductsTable({
                 ...(isExpanded ? group.shopItems.map((sp) => {
                   const { label, color } = getVariantInfo(sp);
                   const dp = discountPct(sp.price, sp.bonus_price);
+                  const isEditing = inlineEditId === sp.id;
                   return (
                     <TableRow key={`v-${sp.id}`} className="bg-gray-50/50 dark:bg-white/1">
                       <TableCell className="px-3 py-3"></TableCell>
@@ -464,21 +497,69 @@ export default function ShopProductsTable({
                         {color?.startsWith('#') && <span className="w-7 h-7 rounded-lg inline-block ring-1 ring-black/10 shadow-sm" style={{ background: color }} />}
                       </TableCell>
                       <TableCell colSpan={2} className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">{label || "—"}</TableCell>
-                      <TableCell className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">{sp.count ? `${sp.count} ta` : "—"}</TableCell>
-                      <TableCell className="px-4 py-3 text-sm">
-                        {sp.bonus_price != null && dp !== null && dp > 0 ? (
-                          <div>
-                            <span className="font-bold text-brand-600 dark:text-brand-400">{formatMoney(sp.bonus_price)} so&apos;m</span>
-                            <span className="ml-1 px-1 py-0.5 rounded-full bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-[10px] font-medium">-{dp}%</span>
-                            <div className="text-[11px] text-gray-400 line-through">{formatMoney(sp.price)} so&apos;m</div>
-                          </div>
-                        ) : (
-                          <span className="font-semibold text-gray-800 dark:text-white">{sp.price != null ? `${formatMoney(sp.price)} so'm` : "—"}</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="px-4 py-3">
-                        <button onClick={() => handleDeleteSingle(sp.id)} className="text-xs text-red-500 hover:text-red-700">O&apos;chirish</button>
-                      </TableCell>
+                      {isEditing ? (
+                        <>
+                          <TableCell className="px-4 py-2">
+                            <input type="number" placeholder="Soni" value={inlineForm.count}
+                              onChange={(e) => setInlineForm({ ...inlineForm, count: e.target.value })}
+                              className="w-20 px-2 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none" />
+                          </TableCell>
+                          <TableCell className="px-4 py-2">
+                            <div className="flex items-center gap-2">
+                              <input type="number" placeholder="Narx" value={inlineForm.price}
+                                onChange={(e) => setInlineForm({ ...inlineForm, price: e.target.value })}
+                                className="w-28 px-2 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none" />
+                              <input type="number" placeholder="Skidka" value={inlineForm.bonus_price}
+                                onChange={(e) => setInlineForm({ ...inlineForm, bonus_price: e.target.value })}
+                                className="w-28 px-2 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-4 py-2">
+                            <div className="flex items-center gap-1.5">
+                              <button onClick={() => saveInlineEdit(sp.id)} disabled={inlineSaving}
+                                className="p-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white transition-colors disabled:opacity-50" title="Saqlash">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+                              </button>
+                              <button onClick={cancelInlineEdit}
+                                className="p-1.5 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 transition-colors" title="Bekor qilish">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                              </button>
+                            </div>
+                          </TableCell>
+                        </>
+                      ) : (
+                        <>
+                          <TableCell className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">{sp.count ? `${sp.count} ta` : "—"}</TableCell>
+                          <TableCell className="px-4 py-3 text-sm">
+                            {sp.bonus_price != null && dp !== null && dp > 0 ? (
+                              <div>
+                                <span className="font-bold text-brand-600 dark:text-brand-400">{formatMoney(sp.bonus_price)} so&apos;m</span>
+                                <span className="ml-1 px-1 py-0.5 rounded-full bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-[10px] font-medium">-{dp}%</span>
+                                <div className="text-[11px] text-gray-400 line-through">{formatMoney(sp.price)} so&apos;m</div>
+                              </div>
+                            ) : (
+                              <span className="font-semibold text-gray-800 dark:text-white">{sp.price != null ? `${formatMoney(sp.price)} so'm` : "—"}</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
+                            <div className="flex items-center gap-1.5">
+                              <button onClick={() => startInlineEdit(sp)} title="Tahrirlash"
+                                className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-500 hover:text-blue-600 transition-colors">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                </svg>
+                              </button>
+                              <button onClick={() => handleDeleteSingle(sp.id)} title="O'chirish"
+                                className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-400 hover:text-red-500 transition-colors">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14zM10 11v6M14 11v6" />
+                                </svg>
+                              </button>
+                            </div>
+                          </TableCell>
+                        </>
+                      )}
                     </TableRow>
                   );
                 }) : []),
