@@ -14,7 +14,7 @@ export default function ShopProductsPage() {
     try {
       const res = await axiosClient.get("/shop-product/all");
       const all: ShopProductItemProps[] = res.data?.data ?? res.data ?? [];
-      setData(all.filter((p: any) => p.shop_id === shopId));
+      setData(shopId ? all.filter((p: any) => p.shop_id === shopId) : all);
     } catch {
       toast.error("Ma'lumotlarni yuklashda xatolik");
     }
@@ -107,7 +107,7 @@ export default function ShopProductsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {catStats.map((c, idx) => (
+                  {catStats.slice(0, 3).map((c, idx) => (
                     <tr key={idx} className="border-t border-gray-100 dark:border-white/4 hover:bg-gray-50 dark:hover:bg-white/2">
                       <td className="px-4 py-2 font-medium text-gray-800 dark:text-white">{c.name}</td>
                       <td className="px-4 py-2 text-center">

@@ -61,7 +61,7 @@ export default function PaymentsTable({
     : tableData.filter((s) => (s.type ?? "").toLowerCase().includes(search.toLowerCase()));
 
   const maxPage = Math.ceil(filteredData.length / +optionValue);
-  const currentItems = filteredData.slice((currentPage - 1) * +optionValue, currentPage * +optionValue);
+  const currentItems = filteredData.sort((a: any, b: any) => b.id - a.id).slice((currentPage - 1) * +optionValue, currentPage * +optionValue);
 
   const openEdit = (item: PaymentItemProps) => {
     setEditItem(item);

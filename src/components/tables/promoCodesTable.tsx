@@ -68,7 +68,7 @@ export default function PromoCodesTable({
 
   const maxPage = Math.ceil(filteredData.length / +optionValue);
   const startIndex = (currentPage - 1) * +optionValue;
-  const currentItems = filteredData.slice(startIndex, startIndex + +optionValue);
+  const currentItems = filteredData.sort((a: any, b: any) => b.id - a.id).slice(startIndex, startIndex + +optionValue);
 
   const openEdit = (item: PromoCodeItemProps) => {
     setEditItem(item);
