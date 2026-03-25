@@ -31,6 +31,7 @@ export default function SubscriptionPage() {
   const [balance, setBalance] = useState<any>(null);
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [toggling, setToggling] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -146,6 +147,95 @@ export default function SubscriptionPage() {
           </>
         )}
       </div>
+
+      {/* Auto Payment Toggle + Top-up Info */}
+      {!loading && (
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 mb-6">
+          {/* Auto Payment */}
+          <div className="rounded-2xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03] p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-gray-800 dark:text-white">Avto to'lov</div>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Balansdan avtomatik yechib obunani uzaytirish
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={async () => {
+                  setToggling(true);
+                  try {
+                    const newVal = !(balance?.auto_payment !== false);
+                    await axiosClient.patch("/subscription/auto-payment", { auto_payment: newVal });
+                    setBalance((b: any) => ({ ...b, auto_payment: newVal }));
+                  } catch { }
+                  setToggling(false);
+                }}
+                disabled={toggling}
+                className="relative"
+              >
+                <div className={`w-12 h-7 rounded-full transition-colors ${balance?.auto_payment !== false ? "bg-emerald-500" : "bg-gray-300 dark:bg-gray-600"}`}>
+                  <div className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${balance?.auto_payment !== false ? "left-6" : "left-1"}`} />
+                </div>
+              </button>
+            </div>
+            <div className={`mt-3 px-3 py-2 rounded-lg text-xs ${balance?.auto_payment !== false ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400" : "bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400"}`}>
+              {balance?.auto_payment !== false
+                ? "Obuna muddati tugaganda, balansda yetarli mablag' bo'lsa avtomatik uzaytiriladi"
+                : "Avto to'lov o'chirilgan — obuna muddati tugaganda do'kon bloklanadi"}
+            </div>
+          </div>
+
+          {/* Balance Top-up Info */}
+          <div className="rounded-2xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03] p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center">
+                <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              </div>
+              <div className="text-sm font-semibold text-gray-800 dark:text-white">Balansni to'ldirish</div>
+            </div>
+            <div className="space-y-2.5">
+              <a
+                href="https://my.click.uz/services/pay?service_id=YOUR_CLICK_SERVICE_ID&merchant_id=YOUR_MERCHANT_ID"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-100 dark:border-white/[0.06] hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-all group"
+              >
+                <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 font-bold text-xs">C</div>
+                <div>
+                  <div className="text-sm font-medium text-gray-700 dark:text-gray-200 group-hover:text-blue-600">Click orqali to'lash</div>
+                  <div className="text-[10px] text-gray-400">Tezkor to'lov</div>
+                </div>
+                <svg className="w-4 h-4 text-gray-300 ml-auto group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              </a>
+              <a
+                href="https://payme.uz/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-100 dark:border-white/[0.06] hover:border-cyan-200 dark:hover:border-cyan-800 hover:bg-cyan-50/50 dark:hover:bg-cyan-900/10 transition-all group"
+              >
+                <div className="w-8 h-8 rounded-lg bg-cyan-100 dark:bg-cyan-900/30 flex items-center justify-center text-cyan-600 font-bold text-xs">P</div>
+                <div>
+                  <div className="text-sm font-medium text-gray-700 dark:text-gray-200 group-hover:text-cyan-600">Payme orqali to'lash</div>
+                  <div className="text-[10px] text-gray-400">Tezkor to'lov</div>
+                </div>
+                <svg className="w-4 h-4 text-gray-300 ml-auto group-hover:text-cyan-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              </a>
+            </div>
+            <p className="mt-3 text-[10px] text-gray-400 text-center">
+              To'lov qilganingizda balans avtomatik to'ldiriladi
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Transaction Logs */}
       <div className="rounded-2xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03] overflow-hidden">
