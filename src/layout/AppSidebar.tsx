@@ -51,16 +51,10 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
     ],
   },
   {
-    label: "Obuna",
-    key: "subscription",
-    items: [
-      { icon: <CalenderIcon />, name: "Obuna holati", path: "/subscription" },
-    ],
-  },
-  {
     label: "Profil",
     key: "profile",
     items: [
+      { icon: <CalenderIcon />, name: "Obuna holati", path: "/subscription" },
       { icon: <UserCircleIcon />, name: "Sozlamalar", path: "/profile" },
     ],
   },
