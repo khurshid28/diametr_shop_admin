@@ -30,6 +30,13 @@ const LOG_LABELS: Record<string, { label: string; cls: string }> = {
 
 const AMOUNTS = [50000, 100000, 200000, 500000];
 
+const PLANS = [
+  { months: 1, discount: 0, label: "1 oy" },
+  { months: 3, discount: 10, label: "3 oy", badge: "−10%" },
+  { months: 6, discount: 20, label: "6 oy", badge: "−20%" },
+  { months: 12, discount: 30, label: "12 oy", badge: "−30%" },
+];
+
 export default function SubscriptionPage() {
   const [balance, setBalance] = useState<any>(null);
   const [logs, setLogs] = useState<any[]>([]);
@@ -37,6 +44,8 @@ export default function SubscriptionPage() {
   const [toggling, setToggling] = useState(false);
   const [payingBalance, setPayingBalance] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState(50000);
+  const [customAmount, setCustomAmount] = useState("");
+  const [selectedPlan, setSelectedPlan] = useState(0);
 
   const fetchData = useCallback(async () => {
     try {
@@ -61,6 +70,12 @@ export default function SubscriptionPage() {
   const subPrice = balance?.subscription_price ?? 50000;
   const shopId = balance?.id;
 
+  const plan = PLANS[selectedPlan];
+  const planTotal = Math.round(subPrice * plan.months * (1 - plan.discount / 100));
+  const planOriginal = subPrice * plan.months;
+
+  const effectiveTopUp = customAmount ? Number(customAmount) : topUpAmount;
+
   const buildClickUrl = (amount: number) =>
     `https://my.click.uz/services/pay?service_id=${import.meta.env.VITE_CLICK_SERVICE_ID ?? ""}&merchant_id=${import.meta.env.VITE_CLICK_MERCHANT_ID ?? ""}&amount=${amount}&transaction_param=${shopId}_${Date.now()}`;
 
@@ -74,14 +89,14 @@ export default function SubscriptionPage() {
 
   const handlePayFromBalance = async () => {
     if (payingBalance) return;
-    if ((balance?.balance ?? 0) < subPrice) {
-      toast.error(`Balansda yetarli mablag' yo'q! Kerak: ${formatMoney(subPrice)} so'm`);
+    if ((balance?.balance ?? 0) < planTotal) {
+      toast.error(`Balansda yetarli mablag' yo'q! Kerak: ${formatMoney(planTotal)} so'm`);
       return;
     }
     setPayingBalance(true);
     try {
-      await axiosClient.post("/subscription/pay-from-balance");
-      toast.success("Obuna muvaffaqiyatli uzaytirildi!");
+      await axiosClient.post("/subscription/pay-from-balance", { months: plan.months });
+      toast.success(`Obuna ${plan.months} oyga muvaffaqiyatli uzaytirildi!`);
       fetchData();
     } catch (e: any) {
       toast.error(e?.response?.data?.message ?? "Xatolik yuz berdi");
@@ -243,14 +258,14 @@ export default function SubscriptionPage() {
 
             {/* Amount selector */}
             <div className="mb-4">
-              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 block">Summa tanlang</label>
-              <div className="grid grid-cols-2 gap-2">
+              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 block">Summa tanlang yoki kiriting</label>
+              <div className="grid grid-cols-2 gap-2 mb-3">
                 {AMOUNTS.map(amt => (
                   <button
                     key={amt}
-                    onClick={() => setTopUpAmount(amt)}
+                    onClick={() => { setTopUpAmount(amt); setCustomAmount(""); }}
                     className={`px-3 py-2.5 rounded-xl text-sm font-medium border transition-all ${
-                      topUpAmount === amt
+                      !customAmount && topUpAmount === amt
                         ? "border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-900/20 dark:text-brand-400 dark:border-brand-700 ring-1 ring-brand-200"
                         : "border-gray-200 dark:border-white/[0.08] text-gray-600 dark:text-gray-400 hover:border-gray-300"
                     }`}
@@ -259,12 +274,27 @@ export default function SubscriptionPage() {
                   </button>
                 ))}
               </div>
+              <div className="relative">
+                <input
+                  type="number"
+                  min={1000}
+                  value={customAmount}
+                  onChange={e => setCustomAmount(e.target.value)}
+                  placeholder="Boshqa summa kiriting..."
+                  className={`w-full px-4 py-2.5 rounded-xl border text-sm transition-all outline-none ${
+                    customAmount
+                      ? "border-brand-500 ring-1 ring-brand-200 bg-brand-50/50 dark:bg-brand-900/10"
+                      : "border-gray-200 dark:border-white/[0.08]"
+                  } dark:bg-white/[0.02] text-gray-700 dark:text-gray-200 placeholder-gray-400`}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">so'm</span>
+              </div>
             </div>
 
             {/* 3 Providers */}
             <div className="space-y-2.5">
               <a
-                href={buildClickUrl(topUpAmount)}
+                href={buildClickUrl(effectiveTopUp)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-100 dark:border-white/[0.06] hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-all group"
@@ -272,12 +302,12 @@ export default function SubscriptionPage() {
                 <img src="/payments/click.png" alt="Click" className="w-9 h-9 rounded-lg object-contain" />
                 <div className="flex-1">
                   <div className="text-sm font-medium text-gray-700 dark:text-gray-200 group-hover:text-blue-600">Click</div>
-                  <div className="text-[10px] text-gray-400">{formatMoney(topUpAmount)} so'm to'lash</div>
+                  <div className="text-[10px] text-gray-400">{formatMoney(effectiveTopUp)} so'm to'lash</div>
                 </div>
                 <svg className="w-4 h-4 text-gray-300 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
               </a>
               <a
-                href={buildPaymeUrl(topUpAmount)}
+                href={buildPaymeUrl(effectiveTopUp)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-100 dark:border-white/[0.06] hover:border-cyan-200 dark:hover:border-cyan-800 hover:bg-cyan-50/50 dark:hover:bg-cyan-900/10 transition-all group"
@@ -285,12 +315,12 @@ export default function SubscriptionPage() {
                 <img src="/payments/payme.png" alt="Payme" className="w-9 h-9 rounded-lg object-contain" />
                 <div className="flex-1">
                   <div className="text-sm font-medium text-gray-700 dark:text-gray-200 group-hover:text-cyan-600">Payme</div>
-                  <div className="text-[10px] text-gray-400">{formatMoney(topUpAmount)} so'm to'lash</div>
+                  <div className="text-[10px] text-gray-400">{formatMoney(effectiveTopUp)} so'm to'lash</div>
                 </div>
                 <svg className="w-4 h-4 text-gray-300 group-hover:text-cyan-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
               </a>
               <a
-                href={buildUzumUrl(topUpAmount)}
+                href={buildUzumUrl(effectiveTopUp)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-100 dark:border-white/[0.06] hover:border-purple-200 dark:hover:border-purple-800 hover:bg-purple-50/50 dark:hover:bg-purple-900/10 transition-all group"
@@ -298,7 +328,7 @@ export default function SubscriptionPage() {
                 <img src="/payments/uzum.png" alt="Uzum" className="w-9 h-9 rounded-lg object-contain" />
                 <div className="flex-1">
                   <div className="text-sm font-medium text-gray-700 dark:text-gray-200 group-hover:text-purple-600">Uzum</div>
-                  <div className="text-[10px] text-gray-400">{formatMoney(topUpAmount)} so'm to'lash</div>
+                  <div className="text-[10px] text-gray-400">{formatMoney(effectiveTopUp)} so'm to'lash</div>
                 </div>
                 <svg className="w-4 h-4 text-gray-300 group-hover:text-purple-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
               </a>
@@ -308,7 +338,7 @@ export default function SubscriptionPage() {
 
           {/* Obunaga to'lov */}
           <div className="rounded-2xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03] p-6">
-            <div className="flex items-center gap-3 mb-2">
+            <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center">
                 <svg className="w-5 h-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -316,23 +346,64 @@ export default function SubscriptionPage() {
               </div>
               <div>
                 <div className="text-sm font-semibold text-gray-800 dark:text-white">Obunaga to'lov</div>
-                <p className="text-xs text-gray-400 mt-0.5">1 oylik obuna — {formatMoney(subPrice)} so'm</p>
+                <p className="text-xs text-gray-400 mt-0.5">Muddat tanlang va to'lang</p>
               </div>
             </div>
 
+            {/* Plan selector */}
+            <div className="mb-4">
+              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 block">Muddat tanlang</label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {PLANS.map((p, i) => (
+                  <button
+                    key={p.months}
+                    onClick={() => setSelectedPlan(i)}
+                    className={`relative px-3 py-3 rounded-xl text-center border transition-all ${
+                      selectedPlan === i
+                        ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-700 ring-1 ring-emerald-200"
+                        : "border-gray-200 dark:border-white/[0.08] hover:border-gray-300"
+                    }`}
+                  >
+                    {p.badge && (
+                      <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-orange-500 text-white whitespace-nowrap">
+                        {p.badge}
+                      </span>
+                    )}
+                    <div className={`text-sm font-bold ${selectedPlan === i ? "text-emerald-700 dark:text-emerald-400" : "text-gray-700 dark:text-gray-300"}`}>
+                      {p.label}
+                    </div>
+                    <div className="text-[10px] text-gray-400 mt-0.5">
+                      {formatMoney(Math.round(subPrice * p.months * (1 - p.discount / 100)))} so'm
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Price summary */}
             <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/10 dark:to-teal-900/10 rounded-xl px-4 py-3 mb-5 border border-emerald-100 dark:border-emerald-900/20">
-              <div className="flex items-center gap-2">
-                <svg className="w-4 h-4 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span className="text-xs text-emerald-700 dark:text-emerald-400">To'lov qilganingizda obuna avtomatik 1 oyga uzaytiriladi</span>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs text-emerald-600 dark:text-emerald-400">{plan.label} obuna</div>
+                  <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+                    {formatMoney(planTotal)} so'm
+                    {plan.discount > 0 && (
+                      <span className="text-xs line-through text-gray-400 font-normal">{formatMoney(planOriginal)}</span>
+                    )}
+                  </div>
+                </div>
+                {plan.discount > 0 && (
+                  <span className="px-2 py-1 rounded-lg bg-orange-100 text-orange-600 text-xs font-bold dark:bg-orange-900/30 dark:text-orange-400">
+                    Tejaysiz {formatMoney(planOriginal - planTotal)} so'm
+                  </span>
+                )}
               </div>
             </div>
 
             {/* 4 Payment Options */}
             <div className="space-y-2.5">
               <a
-                href={buildClickUrl(subPrice)}
+                href={buildClickUrl(planTotal)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-100 dark:border-white/[0.06] hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-all group"
@@ -340,12 +411,12 @@ export default function SubscriptionPage() {
                 <img src="/payments/click.png" alt="Click" className="w-9 h-9 rounded-lg object-contain" />
                 <div className="flex-1">
                   <div className="text-sm font-medium text-gray-700 dark:text-gray-200 group-hover:text-blue-600">Click orqali</div>
-                  <div className="text-[10px] text-gray-400">{formatMoney(subPrice)} so'm</div>
+                  <div className="text-[10px] text-gray-400">{formatMoney(planTotal)} so'm</div>
                 </div>
                 <svg className="w-4 h-4 text-gray-300 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
               </a>
               <a
-                href={buildPaymeUrl(subPrice)}
+                href={buildPaymeUrl(planTotal)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-100 dark:border-white/[0.06] hover:border-cyan-200 dark:hover:border-cyan-800 hover:bg-cyan-50/50 dark:hover:bg-cyan-900/10 transition-all group"
@@ -353,12 +424,12 @@ export default function SubscriptionPage() {
                 <img src="/payments/payme.png" alt="Payme" className="w-9 h-9 rounded-lg object-contain" />
                 <div className="flex-1">
                   <div className="text-sm font-medium text-gray-700 dark:text-gray-200 group-hover:text-cyan-600">Payme orqali</div>
-                  <div className="text-[10px] text-gray-400">{formatMoney(subPrice)} so'm</div>
+                  <div className="text-[10px] text-gray-400">{formatMoney(planTotal)} so'm</div>
                 </div>
                 <svg className="w-4 h-4 text-gray-300 group-hover:text-cyan-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
               </a>
               <a
-                href={buildUzumUrl(subPrice)}
+                href={buildUzumUrl(planTotal)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-100 dark:border-white/[0.06] hover:border-purple-200 dark:hover:border-purple-800 hover:bg-purple-50/50 dark:hover:bg-purple-900/10 transition-all group"
@@ -366,15 +437,15 @@ export default function SubscriptionPage() {
                 <img src="/payments/uzum.png" alt="Uzum" className="w-9 h-9 rounded-lg object-contain" />
                 <div className="flex-1">
                   <div className="text-sm font-medium text-gray-700 dark:text-gray-200 group-hover:text-purple-600">Uzum orqali</div>
-                  <div className="text-[10px] text-gray-400">{formatMoney(subPrice)} so'm</div>
+                  <div className="text-[10px] text-gray-400">{formatMoney(planTotal)} so'm</div>
                 </div>
                 <svg className="w-4 h-4 text-gray-300 group-hover:text-purple-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
               </a>
               <button
                 onClick={handlePayFromBalance}
-                disabled={payingBalance || (balance?.balance ?? 0) < subPrice}
+                disabled={payingBalance || (balance?.balance ?? 0) < planTotal}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all group ${
-                  (balance?.balance ?? 0) >= subPrice
+                  (balance?.balance ?? 0) >= planTotal
                     ? "border-gray-100 dark:border-white/[0.06] hover:border-emerald-200 dark:hover:border-emerald-800 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/10"
                     : "border-gray-100 dark:border-white/[0.06] opacity-50 cursor-not-allowed"
                 }`}
@@ -389,12 +460,12 @@ export default function SubscriptionPage() {
                     {payingBalance ? "To'lanmoqda..." : "Balansdan to'lash"}
                   </div>
                   <div className="text-[10px] text-gray-400">
-                    {(balance?.balance ?? 0) >= subPrice
+                    {(balance?.balance ?? 0) >= planTotal
                       ? `Balans: ${formatMoney(balance?.balance ?? 0)} so'm`
-                      : `Yetarli emas (${formatMoney(balance?.balance ?? 0)} / ${formatMoney(subPrice)} so'm)`}
+                      : `Yetarli emas (${formatMoney(balance?.balance ?? 0)} / ${formatMoney(planTotal)} so'm)`}
                   </div>
                 </div>
-                {(balance?.balance ?? 0) >= subPrice && (
+                {(balance?.balance ?? 0) >= planTotal && (
                   <svg className="w-4 h-4 text-gray-300 group-hover:text-emerald-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                 )}
               </button>
