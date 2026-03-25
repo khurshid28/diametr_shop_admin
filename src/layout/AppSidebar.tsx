@@ -7,6 +7,7 @@ import {
   CardIcon,
   CopyIcon,
   UserCircleIcon,
+  CalenderIcon,
   ChevronDownIcon,
   HorizontaLDots,
   ShopIcon,
@@ -47,6 +48,13 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
       { icon: <SaleIcon />,  name: "Buyurtmalar", path: "/orders" },
       { icon: <CardIcon />,  name: "To'lovlar",   path: "/payments" },
       { icon: <CopyIcon />,  name: "Promo Kodlar", path: "/promo-codes" },
+    ],
+  },
+  {
+    label: "Obuna",
+    key: "subscription",
+    items: [
+      { icon: <CalenderIcon />, name: "Obuna holati", path: "/subscription" },
     ],
   },
   {

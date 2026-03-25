@@ -10,6 +10,7 @@ import ShopProductsPage from "./pages/shop/ShopProducts";
 import PaymentsPage from "./pages/shop/Payments";
 import PromoCodesPage from "./pages/shop/PromoCodes";
 import ProfilePage from "./pages/shop/Profile";
+import SubscriptionPage from "./pages/shop/Subscription";
 import { PrivateRoute } from "./layout/PrivateRoute";
 import SplashScreen from "./components/common/SplashScreen";
 import { useState, useCallback } from "react";
@@ -38,6 +39,7 @@ export default function App() {
               <Route path="/orders" element={<OrdersPage />} />
               <Route path="/payments" element={<PaymentsPage />} />
               <Route path="/promo-codes" element={<PromoCodesPage />} />
+              <Route path="/subscription" element={<SubscriptionPage />} />
               <Route path="/profile" element={<ProfilePage />} />
             </Route>
 
