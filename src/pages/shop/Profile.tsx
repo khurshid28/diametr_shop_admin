@@ -6,26 +6,7 @@ import { toast } from "../../components/ui/toast";
 import Button from "../../components/ui/button/Button";
 import Input from "../../components/form/input/InputField";
 import Label from "../../components/form/Label";
-import Moment from "moment";
 import { formatMoney } from "../../service/formatters/money.format";
-
-// ─── helpers ──────────────────────────────────────────────────────────────────
-function getSubStatus(expired?: string | null) {
-  if (!expired) return { label: "Belgilanmagan", color: "gray", daysLeft: null as number | null };
-  const days = Math.ceil((new Date(expired).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-  if (days < 0)  return { label: "Obuna tugagan", color: "red",    daysLeft: days };
-  if (days <= 7) return { label: `${days} kun qoldi`, color: "yellow", daysLeft: days };
-  return { label: "Faol", color: "green", daysLeft: days };
-}
-
-const LOG_LABELS: Record<string, string> = {
-  TOP_UP_CLICK: "Click orqali",
-  TOP_UP_PAYME: "Payme orqali",
-  TOP_UP_UZUM: "Uzum orqali",
-  TOP_UP_MANUAL: "Qo'lda to'ldirish",
-  SUBSCRIPTION_DEDUCT: "Obuna yechildi",
-  FREE_TRIAL: "Bepul sinov",
-};
 
 // ─── Plan options ──────────────────────────────────────────────────────────────
 const PLANS = [
@@ -48,42 +29,17 @@ export default function ProfilePage() {
   const [savingTg, setSavingTg] = useState(false);
 
   const [selectedPlan, setSelectedPlan] = useState(1);
-  const [balanceData, setBalanceData] = useState<any>(null);
-  const [balanceLogs, setBalanceLogs] = useState<any[]>([]);
+  const [balance, setBalance] = useState<number>(0);
   const [loadingBalance, setLoadingBalance] = useState(false);
-
-  const balance = balanceData?.balance ?? 0;
-  const sub = getSubStatus(balanceData?.expired ?? user?.shop?.expired);
-
-  const subCardBorder =
-    sub.color === "red"    ? "rounded-2xl border border-red-200 bg-red-50 dark:border-red-800/40 dark:bg-white/3 p-6" :
-    sub.color === "yellow" ? "rounded-2xl border border-yellow-200 bg-yellow-50 dark:border-yellow-800/40 dark:bg-white/3 p-6" :
-    sub.color === "green"  ? "rounded-2xl border border-green-200 bg-green-50 dark:border-green-800/40 dark:bg-white/3 p-6" :
-                             "rounded-2xl border border-gray-200 bg-white dark:border-white/5 dark:bg-white/3 p-6";
-  const subBadge =
-    sub.color === "red"    ? "px-3 py-1 rounded-full text-sm font-semibold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" :
-    sub.color === "yellow" ? "px-3 py-1 rounded-full text-sm font-semibold bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" :
-    sub.color === "green"  ? "px-3 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
-                             "px-3 py-1 rounded-full text-sm font-semibold bg-gray-100 text-gray-500";
 
   const fetchBalance = useCallback(async () => {
     if (!shopId) return;
     setLoadingBalance(true);
     try {
-      const [balRes, logsRes] = await Promise.allSettled([
-        axiosClient.get("/subscription/balance"),
-        axiosClient.get("/subscription/my-logs?take=10"),
-      ]);
-      if (balRes.status === "fulfilled") {
-        setBalanceData(balRes.value.data);
-      }
-      if (logsRes.status === "fulfilled") {
-        const d = logsRes.value.data;
-        setBalanceLogs(Array.isArray(d) ? d : d?.data ?? []);
-      }
-    } finally {
-      setLoadingBalance(false);
-    }
+      const balRes = await axiosClient.get("/subscription/balance");
+      setBalance(balRes.data?.balance ?? 0);
+    } catch { }
+    setLoadingBalance(false);
   }, [shopId]);
 
   useEffect(() => { fetchBalance(); }, [fetchBalance]);
@@ -148,87 +104,6 @@ export default function ProfilePage() {
                 <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Dokon</span>
                 <p className="mt-1 text-base text-gray-800 dark:text-white">{user.shop.name}</p>
               </div>
-            )}
-          </div>
-        </div>
-
-        {/* Balance card */}
-        <div className="rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-white dark:from-brand-900/20 dark:to-gray-900 dark:border-brand-800/40 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Hisob Balansi</h3>
-            <button
-              onClick={fetchBalance}
-              className="text-xs text-brand-500 hover:underline"
-            >
-              Yangilash
-            </button>
-          </div>
-          {loadingBalance ? (
-            <div className="animate-pulse h-10 w-40 bg-gray-200 dark:bg-gray-700 rounded-xl" />
-          ) : (
-            <p className="text-3xl font-bold text-brand-600 dark:text-brand-400">
-              {formatMoney(balance)} so&#x27;m
-            </p>
-          )}
-          <div className="mt-4 pt-4 border-t border-brand-100 dark:border-brand-800/30">
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Oxirgi harakatlar</p>
-            {balanceLogs.length === 0 ? (
-              <p className="text-sm text-gray-400">Hali harakatlar yoq</p>
-            ) : (
-              <div className="space-y-2">
-                {balanceLogs.slice(0, 4).map((log: any) => (
-                  <div key={log.id} className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600 dark:text-gray-400 truncate">
-                      {LOG_LABELS[log.type] ?? log.type}
-                    </span>
-                    <span className={log.amount >= 0 ? "text-green-600 dark:text-green-400 font-medium ml-2 shrink-0" : "text-red-500 font-medium ml-2 shrink-0"}>
-                      {log.amount >= 0 ? "+" : ""}{formatMoney(log.amount)} so&#x27;m
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Subscription status */}
-        <div className={subCardBorder}>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Obunam</h3>
-            <span className={subBadge}>{sub.label}</span>
-          </div>
-          <div className="space-y-3">
-            {(balanceData?.expired || user?.shop?.expired) ? (
-              <>
-                <div>
-                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Tugash sanasi</span>
-                  <p className={
-                    sub.color === "red" ? "mt-1 text-xl font-bold text-red-600" :
-                    sub.color === "yellow" ? "mt-1 text-xl font-bold text-yellow-600" :
-                    "mt-1 text-xl font-bold text-green-600"
-                  }>
-                    {Moment(balanceData?.expired || user?.shop?.expired).format("DD.MM.YYYY")}
-                  </p>
-                </div>
-                {sub.daysLeft !== null && sub.daysLeft >= 0 && (
-                  <div>
-                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Qolgan muddat</span>
-                    <p className="mt-1 text-base text-gray-700 dark:text-gray-300">{sub.daysLeft} kun</p>
-                  </div>
-                )}
-                {sub.color === "red" && (
-                  <div className="mt-3 p-3 rounded-xl bg-red-100 dark:bg-red-900/20 text-sm text-red-700 dark:text-red-400">
-                    Obunangiz tugagan. Hisobni toldiring.
-                  </div>
-                )}
-                {sub.color === "yellow" && (
-                  <div className="mt-3 p-3 rounded-xl bg-yellow-100 dark:bg-yellow-900/20 text-sm text-yellow-700 dark:text-yellow-400">
-                    Obunangiz tugashiga {sub.daysLeft} kun qoldi.
-                  </div>
-                )}
-              </>
-            ) : (
-              <p className="text-sm text-gray-500 dark:text-gray-400">Obuna ma&apos;lumotlari mavjud emas</p>
             )}
           </div>
         </div>
