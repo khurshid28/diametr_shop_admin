@@ -48,11 +48,12 @@ export default function ProfilePage() {
   const [savingTg, setSavingTg] = useState(false);
 
   const [selectedPlan, setSelectedPlan] = useState(1);
-  const [balance, setBalance] = useState<number>(0);
+  const [balanceData, setBalanceData] = useState<any>(null);
   const [balanceLogs, setBalanceLogs] = useState<any[]>([]);
   const [loadingBalance, setLoadingBalance] = useState(false);
 
-  const sub = getSubStatus(user?.shop?.expired);
+  const balance = balanceData?.balance ?? 0;
+  const sub = getSubStatus(balanceData?.expired ?? user?.shop?.expired);
 
   const subCardBorder =
     sub.color === "red"    ? "rounded-2xl border border-red-200 bg-red-50 dark:border-red-800/40 dark:bg-white/3 p-6" :
@@ -74,7 +75,7 @@ export default function ProfilePage() {
         axiosClient.get("/subscription/my-logs?take=10"),
       ]);
       if (balRes.status === "fulfilled") {
-        setBalance(balRes.value.data?.balance ?? 0);
+        setBalanceData(balRes.value.data);
       }
       if (logsRes.status === "fulfilled") {
         const d = logsRes.value.data;
@@ -197,7 +198,7 @@ export default function ProfilePage() {
             <span className={subBadge}>{sub.label}</span>
           </div>
           <div className="space-y-3">
-            {user?.shop?.expired ? (
+            {(balanceData?.expired || user?.shop?.expired) ? (
               <>
                 <div>
                   <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Tugash sanasi</span>
@@ -206,7 +207,7 @@ export default function ProfilePage() {
                     sub.color === "yellow" ? "mt-1 text-xl font-bold text-yellow-600" :
                     "mt-1 text-xl font-bold text-green-600"
                   }>
-                    {Moment(user.shop.expired).format("DD.MM.YYYY")}
+                    {Moment(balanceData?.expired || user?.shop?.expired).format("DD.MM.YYYY")}
                   </p>
                 </div>
                 {sub.daysLeft !== null && sub.daysLeft >= 0 && (
