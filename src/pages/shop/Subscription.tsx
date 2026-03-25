@@ -3,6 +3,7 @@ import PageMeta from "../../components/common/PageMeta";
 import { useCallback, useEffect, useState } from "react";
 import axiosClient from "../../service/axios.service";
 import Moment from "moment";
+import { toast } from "react-toastify";
 
 function formatMoney(n: number) {
   return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(n);
@@ -27,11 +28,15 @@ const LOG_LABELS: Record<string, { label: string; cls: string }> = {
   FREE_TRIAL: { label: "Tekin", cls: "bg-violet-50 text-violet-600" },
 };
 
+const AMOUNTS = [50000, 100000, 200000, 500000];
+
 export default function SubscriptionPage() {
   const [balance, setBalance] = useState<any>(null);
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
+  const [payingBalance, setPayingBalance] = useState(false);
+  const [topUpAmount, setTopUpAmount] = useState(50000);
 
   const fetchData = useCallback(async () => {
     try {
@@ -53,6 +58,36 @@ export default function SubscriptionPage() {
 
   const st = statusInfo(balance?.expired);
   const isExpired = st.color === "red" && (st.days ?? 0) < 0;
+  const subPrice = balance?.subscription_price ?? 50000;
+  const shopId = balance?.id;
+
+  const buildClickUrl = (amount: number) =>
+    `https://my.click.uz/services/pay?service_id=${import.meta.env.VITE_CLICK_SERVICE_ID ?? ""}&merchant_id=${import.meta.env.VITE_CLICK_MERCHANT_ID ?? ""}&amount=${amount}&transaction_param=${shopId}_${Date.now()}`;
+
+  const buildPaymeUrl = (amount: number) => {
+    const params = `m=${import.meta.env.VITE_PAYME_MERCHANT_ID ?? ""};ac.shop_id=${shopId};a=${amount * 100}`;
+    return `https://checkout.paycom.uz/${btoa(params)}`;
+  };
+
+  const buildUzumUrl = (amount: number) =>
+    `https://www.uzumbank.uz/pay?serviceId=${import.meta.env.VITE_UZUM_SERVICE_ID ?? ""}&amount=${amount}&shopId=${shopId}`;
+
+  const handlePayFromBalance = async () => {
+    if (payingBalance) return;
+    if ((balance?.balance ?? 0) < subPrice) {
+      toast.error(`Balansda yetarli mablag' yo'q! Kerak: ${formatMoney(subPrice)} so'm`);
+      return;
+    }
+    setPayingBalance(true);
+    try {
+      await axiosClient.post("/subscription/pay-from-balance");
+      toast.success("Obuna muvaffaqiyatli uzaytirildi!");
+      fetchData();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? "Xatolik yuz berdi");
+    }
+    setPayingBalance(false);
+  };
 
   return (
     <>
@@ -148,91 +183,222 @@ export default function SubscriptionPage() {
         )}
       </div>
 
-      {/* Auto Payment Toggle + Top-up Info */}
+      {/* Auto Payment Toggle */}
       {!loading && (
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 mb-6">
-          {/* Auto Payment */}
-          <div className="rounded-2xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03] p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
-                  <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                </div>
-                <div>
-                  <div className="text-sm font-semibold text-gray-800 dark:text-white">Avto to'lov</div>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    Balansdan avtomatik yechib obunani uzaytirish
-                  </p>
-                </div>
+        <div className="rounded-2xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03] p-6 mb-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
+                <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
               </div>
-              <button
-                onClick={async () => {
-                  setToggling(true);
-                  try {
-                    const newVal = !(balance?.auto_payment !== false);
-                    await axiosClient.patch("/subscription/auto-payment", { auto_payment: newVal });
-                    setBalance((b: any) => ({ ...b, auto_payment: newVal }));
-                  } catch { }
-                  setToggling(false);
-                }}
-                disabled={toggling}
-                className="relative"
-              >
-                <div className={`w-12 h-7 rounded-full transition-colors ${balance?.auto_payment !== false ? "bg-emerald-500" : "bg-gray-300 dark:bg-gray-600"}`}>
-                  <div className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${balance?.auto_payment !== false ? "left-6" : "left-1"}`} />
-                </div>
-              </button>
+              <div>
+                <div className="text-sm font-semibold text-gray-800 dark:text-white">Avto to'lov</div>
+                <p className="text-xs text-gray-400 mt-0.5">Balansdan avtomatik yechib obunani uzaytirish</p>
+              </div>
             </div>
-            <div className={`mt-3 px-3 py-2 rounded-lg text-xs ${balance?.auto_payment !== false ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400" : "bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400"}`}>
-              {balance?.auto_payment !== false
-                ? "Obuna muddati tugaganda, balansda yetarli mablag' bo'lsa avtomatik uzaytiriladi"
-                : "Avto to'lov o'chirilgan — obuna muddati tugaganda do'kon bloklanadi"}
-            </div>
+            <button
+              onClick={async () => {
+                setToggling(true);
+                try {
+                  const newVal = !(balance?.auto_payment !== false);
+                  await axiosClient.patch("/subscription/auto-payment", { auto_payment: newVal });
+                  setBalance((b: any) => ({ ...b, auto_payment: newVal }));
+                } catch { }
+                setToggling(false);
+              }}
+              disabled={toggling}
+              className="relative"
+            >
+              <div className={`w-12 h-7 rounded-full transition-colors ${balance?.auto_payment !== false ? "bg-emerald-500" : "bg-gray-300 dark:bg-gray-600"}`}>
+                <div className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${balance?.auto_payment !== false ? "left-6" : "left-1"}`} />
+              </div>
+            </button>
           </div>
+          <div className={`mt-3 px-3 py-2 rounded-lg text-xs ${balance?.auto_payment !== false ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400" : "bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400"}`}>
+            {balance?.auto_payment !== false
+              ? "Obuna muddati tugaganda, balansda yetarli mablag' bo'lsa avtomatik uzaytiriladi"
+              : "Avto to'lov o'chirilgan — obuna muddati tugaganda do'kon bloklanadi"}
+          </div>
+        </div>
+      )}
 
-          {/* Balance Top-up Info */}
+      {/* Balance Top-up + Subscription Payment */}
+      {!loading && (
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 mb-6">
+          {/* Balansni to'ldirish */}
           <div className="rounded-2xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03] p-6">
-            <div className="flex items-center gap-3 mb-4">
+            <div className="flex items-center gap-3 mb-5">
               <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center">
                 <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
               </div>
-              <div className="text-sm font-semibold text-gray-800 dark:text-white">Balansni to'ldirish</div>
+              <div>
+                <div className="text-sm font-semibold text-gray-800 dark:text-white">Balansni to'ldirish</div>
+                <p className="text-xs text-gray-400 mt-0.5">Hisobingizni to'ldiring</p>
+              </div>
             </div>
+
+            {/* Amount selector */}
+            <div className="mb-4">
+              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 block">Summa tanlang</label>
+              <div className="grid grid-cols-2 gap-2">
+                {AMOUNTS.map(amt => (
+                  <button
+                    key={amt}
+                    onClick={() => setTopUpAmount(amt)}
+                    className={`px-3 py-2.5 rounded-xl text-sm font-medium border transition-all ${
+                      topUpAmount === amt
+                        ? "border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-900/20 dark:text-brand-400 dark:border-brand-700 ring-1 ring-brand-200"
+                        : "border-gray-200 dark:border-white/[0.08] text-gray-600 dark:text-gray-400 hover:border-gray-300"
+                    }`}
+                  >
+                    {formatMoney(amt)} so'm
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 3 Providers */}
             <div className="space-y-2.5">
               <a
-                href="https://my.click.uz/services/pay?service_id=YOUR_CLICK_SERVICE_ID&merchant_id=YOUR_MERCHANT_ID"
+                href={buildClickUrl(topUpAmount)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-100 dark:border-white/[0.06] hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-all group"
               >
-                <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 font-bold text-xs">C</div>
-                <div>
-                  <div className="text-sm font-medium text-gray-700 dark:text-gray-200 group-hover:text-blue-600">Click orqali to'lash</div>
-                  <div className="text-[10px] text-gray-400">Tezkor to'lov</div>
+                <img src="/payments/click.png" alt="Click" className="w-9 h-9 rounded-lg object-contain" />
+                <div className="flex-1">
+                  <div className="text-sm font-medium text-gray-700 dark:text-gray-200 group-hover:text-blue-600">Click</div>
+                  <div className="text-[10px] text-gray-400">{formatMoney(topUpAmount)} so'm to'lash</div>
                 </div>
-                <svg className="w-4 h-4 text-gray-300 ml-auto group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                <svg className="w-4 h-4 text-gray-300 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
               </a>
               <a
-                href="https://payme.uz/"
+                href={buildPaymeUrl(topUpAmount)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-100 dark:border-white/[0.06] hover:border-cyan-200 dark:hover:border-cyan-800 hover:bg-cyan-50/50 dark:hover:bg-cyan-900/10 transition-all group"
               >
-                <div className="w-8 h-8 rounded-lg bg-cyan-100 dark:bg-cyan-900/30 flex items-center justify-center text-cyan-600 font-bold text-xs">P</div>
-                <div>
-                  <div className="text-sm font-medium text-gray-700 dark:text-gray-200 group-hover:text-cyan-600">Payme orqali to'lash</div>
-                  <div className="text-[10px] text-gray-400">Tezkor to'lov</div>
+                <img src="/payments/payme.png" alt="Payme" className="w-9 h-9 rounded-lg object-contain" />
+                <div className="flex-1">
+                  <div className="text-sm font-medium text-gray-700 dark:text-gray-200 group-hover:text-cyan-600">Payme</div>
+                  <div className="text-[10px] text-gray-400">{formatMoney(topUpAmount)} so'm to'lash</div>
                 </div>
-                <svg className="w-4 h-4 text-gray-300 ml-auto group-hover:text-cyan-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                <svg className="w-4 h-4 text-gray-300 group-hover:text-cyan-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              </a>
+              <a
+                href={buildUzumUrl(topUpAmount)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-100 dark:border-white/[0.06] hover:border-purple-200 dark:hover:border-purple-800 hover:bg-purple-50/50 dark:hover:bg-purple-900/10 transition-all group"
+              >
+                <img src="/payments/uzum.png" alt="Uzum" className="w-9 h-9 rounded-lg object-contain" />
+                <div className="flex-1">
+                  <div className="text-sm font-medium text-gray-700 dark:text-gray-200 group-hover:text-purple-600">Uzum</div>
+                  <div className="text-[10px] text-gray-400">{formatMoney(topUpAmount)} so'm to'lash</div>
+                </div>
+                <svg className="w-4 h-4 text-gray-300 group-hover:text-purple-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
               </a>
             </div>
-            <p className="mt-3 text-[10px] text-gray-400 text-center">
-              To'lov qilganingizda balans avtomatik to'ldiriladi
-            </p>
+            <p className="mt-3 text-[10px] text-gray-400 text-center">To'lov qilganingizda balans avtomatik to'ldiriladi</p>
+          </div>
+
+          {/* Obunaga to'lov */}
+          <div className="rounded-2xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03] p-6">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center">
+                <svg className="w-5 h-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <div className="text-sm font-semibold text-gray-800 dark:text-white">Obunaga to'lov</div>
+                <p className="text-xs text-gray-400 mt-0.5">1 oylik obuna — {formatMoney(subPrice)} so'm</p>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/10 dark:to-teal-900/10 rounded-xl px-4 py-3 mb-5 border border-emerald-100 dark:border-emerald-900/20">
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-xs text-emerald-700 dark:text-emerald-400">To'lov qilganingizda obuna avtomatik 1 oyga uzaytiriladi</span>
+              </div>
+            </div>
+
+            {/* 4 Payment Options */}
+            <div className="space-y-2.5">
+              <a
+                href={buildClickUrl(subPrice)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-100 dark:border-white/[0.06] hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-all group"
+              >
+                <img src="/payments/click.png" alt="Click" className="w-9 h-9 rounded-lg object-contain" />
+                <div className="flex-1">
+                  <div className="text-sm font-medium text-gray-700 dark:text-gray-200 group-hover:text-blue-600">Click orqali</div>
+                  <div className="text-[10px] text-gray-400">{formatMoney(subPrice)} so'm</div>
+                </div>
+                <svg className="w-4 h-4 text-gray-300 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              </a>
+              <a
+                href={buildPaymeUrl(subPrice)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-100 dark:border-white/[0.06] hover:border-cyan-200 dark:hover:border-cyan-800 hover:bg-cyan-50/50 dark:hover:bg-cyan-900/10 transition-all group"
+              >
+                <img src="/payments/payme.png" alt="Payme" className="w-9 h-9 rounded-lg object-contain" />
+                <div className="flex-1">
+                  <div className="text-sm font-medium text-gray-700 dark:text-gray-200 group-hover:text-cyan-600">Payme orqali</div>
+                  <div className="text-[10px] text-gray-400">{formatMoney(subPrice)} so'm</div>
+                </div>
+                <svg className="w-4 h-4 text-gray-300 group-hover:text-cyan-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              </a>
+              <a
+                href={buildUzumUrl(subPrice)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-100 dark:border-white/[0.06] hover:border-purple-200 dark:hover:border-purple-800 hover:bg-purple-50/50 dark:hover:bg-purple-900/10 transition-all group"
+              >
+                <img src="/payments/uzum.png" alt="Uzum" className="w-9 h-9 rounded-lg object-contain" />
+                <div className="flex-1">
+                  <div className="text-sm font-medium text-gray-700 dark:text-gray-200 group-hover:text-purple-600">Uzum orqali</div>
+                  <div className="text-[10px] text-gray-400">{formatMoney(subPrice)} so'm</div>
+                </div>
+                <svg className="w-4 h-4 text-gray-300 group-hover:text-purple-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              </a>
+              <button
+                onClick={handlePayFromBalance}
+                disabled={payingBalance || (balance?.balance ?? 0) < subPrice}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all group ${
+                  (balance?.balance ?? 0) >= subPrice
+                    ? "border-gray-100 dark:border-white/[0.06] hover:border-emerald-200 dark:hover:border-emerald-800 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/10"
+                    : "border-gray-100 dark:border-white/[0.06] opacity-50 cursor-not-allowed"
+                }`}
+              >
+                <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                </div>
+                <div className="flex-1 text-left">
+                  <div className="text-sm font-medium text-gray-700 dark:text-gray-200 group-hover:text-emerald-600">
+                    {payingBalance ? "To'lanmoqda..." : "Balansdan to'lash"}
+                  </div>
+                  <div className="text-[10px] text-gray-400">
+                    {(balance?.balance ?? 0) >= subPrice
+                      ? `Balans: ${formatMoney(balance?.balance ?? 0)} so'm`
+                      : `Yetarli emas (${formatMoney(balance?.balance ?? 0)} / ${formatMoney(subPrice)} so'm)`}
+                  </div>
+                </div>
+                {(balance?.balance ?? 0) >= subPrice && (
+                  <svg className="w-4 h-4 text-gray-300 group-hover:text-emerald-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
